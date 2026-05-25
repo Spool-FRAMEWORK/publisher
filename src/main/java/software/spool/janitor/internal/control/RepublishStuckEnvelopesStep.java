@@ -44,7 +44,7 @@ public class RepublishStuckEnvelopesStep implements Step<PipelineContext, Pipeli
 
     private EnvelopeStored buildEventFrom(Envelope envelope) {
         return EnvelopeStored.builder()
-                .correlationId(envelope.metadata().get(EventMetadataKey.CORRELATION_ID))
+                .correlationId(new String(envelope.metadata().get(EventMetadataKey.CORRELATION_ID)))
                 .idempotencyKey(envelope.idempotencyKey())
                 .build();
     }
