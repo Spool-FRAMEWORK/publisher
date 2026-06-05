@@ -12,6 +12,9 @@ import software.spool.core.port.decorator.SafeInboxUpdater;
 import software.spool.core.port.inbox.InboxEnvelopeRemover;
 import software.spool.core.port.inbox.InboxStatusQuery;
 import software.spool.core.port.inbox.InboxUpdater;
+import software.spool.core.adapter.otel.OpenTelemetryMetricsRegistry;
+import software.spool.core.port.metrics.MetricsRegistry;
+import software.spool.core.port.metrics.SpoolMetrics;
 import software.spool.core.port.watchdog.ModuleHeartBeat;
 import software.spool.core.utils.polling.PollingConfiguration;
 import software.spool.core.utils.routing.ErrorRouter;
@@ -35,6 +38,7 @@ public class PollingJanitorBuilder {
     private ErrorRouter errorRouter;
     private Integer millisecondsThreshold;
     private Integer millisecondsTtl;
+    private final MetricsRegistry metricsRegistry = new OpenTelemetryMetricsRegistry();
 
     PollingJanitorBuilder(ModuleHeartBeat heartBeat) {
         this.heartBeat = heartBeat;
@@ -98,15 +102,19 @@ public class PollingJanitorBuilder {
     }
 
     private Handler<EventsDTO> initializeJanitorScheduleHandler() {
-        return new JanitorScheduleHandler(initializePipeline(), getErrorRouter());
+        MetricsRegistry.CounterMetric cyclesCompleted = metricsRegistry.counter(SpoolMetrics.Janitor.CYCLES_COMPLETED_TOTAL, SpoolMetrics.Janitor.CYCLES_COMPLETED_TOTAL_DESC, "1");
+        MetricsRegistry.CounterMetric cyclesFailed = metricsRegistry.counter(SpoolMetrics.Janitor.CYCLES_FAILED_TOTAL, SpoolMetrics.Janitor.CYCLES_FAILED_TOTAL_DESC, "1");
+        MetricsRegistry.TimerMetric cycleDuration = metricsRegistry.timer(SpoolMetrics.Janitor.CYCLE_DURATION, SpoolMetrics.Janitor.CYCLE_DURATION_DESC, "s");
+        MetricsRegistry.CounterMetric recordsCleaned = metricsRegistry.counter(SpoolMetrics.Janitor.RECORDS_CLEANED_TOTAL, SpoolMetrics.Janitor.RECORDS_CLEANED_TOTAL_DESC, "1");
+        return new JanitorScheduleHandler(initializePipeline(recordsCleaned), getErrorRouter(), cyclesCompleted, cyclesFailed, cycleDuration);
     }
 
-    private Pipeline<PipelineContext, PipelineContext> initializePipeline() {
+    private Pipeline<PipelineContext, PipelineContext> initializePipeline(MetricsRegistry.CounterMetric recordsCleaned) {
         return Pipeline.<PipelineContext>start()
                 .add(new ObservedStep<>("update-persisted", new UpdatePersistedEnvelopesStep(updater)))
-                .add(new ObservedStep<>("quarantine-envelopes", new QuarantineFailedEnvelopesStep(updater)))
+                .add(new ObservedStep<>("quarantine-envelopes", new QuarantineFailedEnvelopesStep(updater, recordsCleaned)))
                 .add(new ObservedStep<>("expired-envelopes",
-                        new RemoveExpiredEnvelopesStep(getErrorRouter(), Duration.ofMillis(millisecondsTtl), remover, reader)))
+                        new RemoveExpiredEnvelopesStep(getErrorRouter(), Duration.ofMillis(millisecondsTtl), remover, reader, recordsCleaned)))
                 .add(new ObservedStep<>("handle-stuck-envelopes",
                         new RepublishStuckEnvelopesStep(reader, publisher, Duration.ofMillis(millisecondsThreshold))));
     }
