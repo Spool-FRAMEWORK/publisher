@@ -1,0 +1,394 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "tags": ["spool", "watchdog"],
+  "time": { "from": "now-15m", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Spool — Watchdog",
+  "uid": "spool-watchdog-v1",
+  "version": 1,
+
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+        "definition": "label_values(spool_module_active, service_name)",
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "label": "Nodo",
+        "multi": true,
+        "name": "node",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(spool_module_active, service_name)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+        "definition": "label_values(spool_module_active{service_name=~\"$node\"}, module)",
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "label": "Módulo",
+        "multi": true,
+        "name": "module",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(spool_module_active{service_name=~\"$node\"}, module)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+
+  "panels": [
+
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Módulos",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+    },
+
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Módulos activos",
+      "description": "Número de módulos actualmente en ejecución.",
+      "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red",    "value": 0 },
+              { "color": "green",  "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+          "expr": "sum(spool_module_active{service_name=~\"$node\", module=~\"$module\"})\nor vector(0)",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 1 }
+    },
+
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Timeouts detectados",
+      "description": "Módulos que han superado el timeout de heartbeat desde el arranque.",
+      "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": 0 },
+              { "color": "yellow", "value": 1 },
+              { "color": "red",    "value": 5 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+          "expr": "sum(spool_watchdog_timeouts_total{service_name=~\"$node\"})\nor vector(0)",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 8, "x": 8, "y": 1 }
+    },
+
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Zombies eliminados",
+      "description": "Módulos sin actividad durante el periodo zombie y retirados del registro.",
+      "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": 0 },
+              { "color": "yellow", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+          "expr": "sum(spool_watchdog_zombies_total{service_name=~\"$node\"})\nor vector(0)",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 1 }
+    },
+
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Heartbeats recibidos / s",
+      "description": "Ritmo de heartbeats por módulo. Un módulo que no aparece aquí puede estar degradado.",
+      "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": {
+          "displayMode": "table", "placement": "bottom", "showLegend": true,
+          "calcs": ["lastNotNull", "mean"]
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+          "expr": "sum by (service_name, module) (rate(spool_watchdog_heartbeats_total{service_name=~\"$node\", module=~\"$module\"}[1m]))",
+          "legendFormat": "{{service_name}} / {{module}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 }
+    },
+
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Arranques y paradas de módulos",
+      "description": "Eventos de ciclo de vida detectados por el watchdog.",
+      "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 5, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": {
+          "displayMode": "table", "placement": "bottom", "showLegend": true,
+          "calcs": ["lastNotNull", "max"]
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+          "expr": "sum by (service_name, module) (rate(spool_module_started_total{service_name=~\"$node\", module=~\"$module\"}[1m]))",
+          "legendFormat": "started — {{service_name}} / {{module}}",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+          "expr": "sum by (service_name, module) (rate(spool_module_stopped_total{service_name=~\"$node\", module=~\"$module\"}[1m]))",
+          "legendFormat": "stopped — {{service_name}} / {{module}}",
+          "refId": "B"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 }
+    },
+
+    {
+      "id": 7,
+      "type": "row",
+      "title": "Degradaciones",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 13 }
+    },
+
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Degradaciones detectadas / s",
+      "description": "Módulos que entran en estado DEGRADED por superar el timeout de heartbeat.",
+      "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "fixedColor": "orange", "mode": "fixed" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": {
+          "displayMode": "table", "placement": "bottom", "showLegend": true,
+          "calcs": ["lastNotNull", "max"]
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+          "expr": "sum by (service_name, module) (rate(spool_module_degraded_total{service_name=~\"$node\", module=~\"$module\"}[1m]))",
+          "legendFormat": "{{service_name}} / {{module}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 }
+    },
+
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "Degradaciones (total acumulado)",
+      "description": "Total de eventos DEGRADED desde el arranque.",
+      "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": 0 },
+              { "color": "orange", "value": 1 },
+              { "color": "red",    "value": 10 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+          "expr": "sum(spool_module_degraded_total{service_name=~\"$node\", module=~\"$module\"})\nor vector(0)",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 }
+    },
+
+    {
+      "id": 10,
+      "type": "row",
+      "title": "Performance",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 }
+    },
+
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Duración del check (p50 / p95)",
+      "description": "Tiempo que tarda cada ciclo de monitorización del watchdog.",
+      "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 5, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": {
+          "displayMode": "table", "placement": "bottom", "showLegend": true,
+          "calcs": ["lastNotNull", "mean", "max"]
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+          "expr": "histogram_quantile(0.5, sum by (le, service_name) (rate(spool_watchdog_check_duration_bucket{service_name=~\"$node\"}[1m])))",
+          "legendFormat": "p50 — {{service_name}}",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+          "expr": "histogram_quantile(0.95, sum by (le, service_name) (rate(spool_watchdog_check_duration_bucket{service_name=~\"$node\"}[1m])))",
+          "legendFormat": "p95 — {{service_name}}",
+          "refId": "B"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 23 }
+    }
+
+  ]
+}
