@@ -1,60 +1,179 @@
-# Spool — Publisher
+# Spool — Janitor
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
-[![Java](https://img.shields.io/badge/Java-17%2B-orange.svg)](https://openjdk.org/)
+[![Java](https://img.shields.io/badge/Java-21%2B-orange.svg)](https://openjdk.org/)
 [![Maven](https://img.shields.io/badge/build-Maven-C71A36.svg)](https://maven.apache.org/)
 
-**Publisher** is the **Spool** framework module responsible for **publishing raw data from the inbox to event channels**. It acts as the bridge between inbox storage and downstream consumer distribution, ensuring traceability, idempotency, and declarative error handling.
+**Janitor** is the **Spool** framework module responsible for **inbox housekeeping**: it periodically scans the inbox to update persisted envelopes, quarantine failed ones, remove expired ones, and republish those that are stuck.
 
 ---
 
 ## Table of Contents
 
-- [Architecture](#architecture)
-- [Key Concepts](#key-concepts)
+- [What it does](#what-it-does)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Examples](#examples)
-  - [Reactive Publishing](#reactive-publishing)
-  - [Polling-based Publishing](#polling-based-publishing)
+  - [Basic Polling Janitor](#basic-polling-janitor)
   - [Custom Polling Interval](#custom-polling-interval)
-  - [Channel Routing by Event Type](#channel-routing-by-event-type)
+  - [Watchdog Integration](#watchdog-integration)
   - [Custom Error Routing](#custom-error-routing)
-  - [Full Pipeline (Crawler → Publisher → Ingester)](#full-pipeline-crawler--publisher--ingester)
-- [API Reference](#api-reference)
-- [Event Model](#event-model)
+- [Key Concepts](#key-concepts)
 - [License](#license)
 
 ---
 
-## Architecture
+## What it does
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                          Publisher                            │
-│                                                              │
-│  InboxItemStored ──► InboxItemStoredHandler                   │
-│                          │                                   │
-│                ┌─────────┼──────────┐                        │
-│                ▼         ▼          ▼                        │
-│         InboxUpdater  EventBus   InboxUpdater                │
-│         (→PUBLISHING)  (emits    (→PUBLISHED)                │
-│                       ItemPublished)                         │
-│                                                              │
-│  Strategy: ReactiveFeeder  OR  PollingFeeder                 │
-│            (event-driven)      (scheduled poll)              │
-│                                                              │
-│  Errors ──► ErrorRouter ──► EventBus.emit(FailureEvent)      │
-└──────────────────────────────────────────────────────────────┘
+Every N seconds:
+
+InboxStatusQuery.findByStatus(CAPTURED)
+      │
+      ▼
+┌─────────────────────────────────────────────────┐
+│  Pipeline                                        │
+│                                                  │
+│  1. UpdatePersistedEnvelopes   → mark PERSISTED  │
+│  2. QuarantineFailedEnvelopes  → mark QUARANTINED│
+│  3. RemoveExpiredEnvelopes     → delete (> TTL)  │
+│  4. RepublishStuckEnvelopes    → re-publish      │
+│                                 (> threshold)    │
+└─────────────────────────────────────────────────┘
+      │
+      ▼
+EventPublisher / InboxUpdater / InboxEnvelopeRemover
 ```
 
-The publishing flow:
+The Janitor runs on a fixed schedule and keeps the inbox clean and healthy. Without it, stuck or expired envelopes would accumulate indefinitely.
 
-1. An **`InboxItemStored`** event is received (reactive) or discovered by polling the inbox.
-2. The **`InboxUpdater`** marks the item as `PUBLISHING`.
-3. An **`ItemPublished`** event is emitted on the event bus with the payload.
-4. The **`InboxUpdater`** marks the item as `PUBLISHED`.
-5. If anything fails, the **`ErrorRouter`** dispatches the exception to the appropriate handler.
+---
+
+## Installation
+
+```xml
+<dependency>
+    <groupId>io.github.spool-framework</groupId>
+    <artifactId>janitor</artifactId>
+    <version>1.0.5-SNAPSHOT</version>
+</dependency>
+```
+
+```xml
+<repositories>
+    <repository>
+        <id>github</id>
+        <url>https://maven.pkg.github.com/Spool-FRAMEWORK/*</url>
+    </repository>
+</repositories>
+```
+
+> Requires **Java 21+**.
+
+---
+
+## Quick Start
+
+```java
+Janitor janitor = JanitorBuilderFactory.polling()
+        .from(inboxStatusQuery)             // query inbox by status
+        .with(inboxUpdater)                 // update envelope statuses
+        .removeWith(inboxEnvelopeRemover)   // remove expired envelopes
+        .on(eventBus)                       // republish stuck envelopes
+        .subscribeWith(eventBus)            // listen for persistence events
+        .every(Duration.ofSeconds(30))      // run every 30 seconds
+        .withMillisecondsThreshold(60_000)  // republish if stuck > 60s
+        .withMillisecondsTtl(3_600_000)     // remove if expired > 1h
+        .create();
+
+SpoolNode node = SpoolNode.create()
+        .register(janitor);
+
+node.start();
+```
+
+---
+
+## Examples
+
+### Basic Polling Janitor
+
+```java
+Janitor janitor = JanitorBuilderFactory.polling()
+        .from(inboxStatusQuery)
+        .with(inboxUpdater)
+        .removeWith(inboxEnvelopeRemover)
+        .on(eventBus)
+        .subscribeWith(eventBus)
+        .every(Duration.ofSeconds(30))
+        .withMillisecondsThreshold(60_000)
+        .withMillisecondsTtl(3_600_000)
+        .create();
+```
+
+---
+
+### Custom Polling Interval
+
+Tune the schedule to match your throughput and latency requirements.
+
+```java
+Janitor janitor = JanitorBuilderFactory.polling()
+        .from(inboxStatusQuery)
+        .with(inboxUpdater)
+        .removeWith(inboxEnvelopeRemover)
+        .on(eventBus)
+        .subscribeWith(eventBus)
+        .every(Duration.ofSeconds(5))       // check every 5 seconds for high-throughput
+        .withMillisecondsThreshold(30_000)  // republish stuck after 30s
+        .withMillisecondsTtl(600_000)       // remove expired after 10 min
+        .create();
+```
+
+---
+
+### Watchdog Integration
+
+Register with the Watchdog so the Janitor sends periodic heartbeats.
+
+```java
+Janitor janitor = JanitorBuilderFactory
+        .watchdog("http://spool-watchdog:8080", "my-janitor")
+        .polling()
+        .from(inboxStatusQuery)
+        .with(inboxUpdater)
+        .removeWith(inboxEnvelopeRemover)
+        .on(eventBus)
+        .subscribeWith(eventBus)
+        .every(Duration.ofSeconds(30))
+        .withMillisecondsThreshold(60_000)
+        .withMillisecondsTtl(3_600_000)
+        .create();
+```
+
+---
+
+### Custom Error Routing
+
+```java
+ErrorRouter errorRouter = new ErrorRouter()
+        .on(InboxReadException.class, (e, ctx) ->
+                logger.error("Failed to read inbox: {}", e.getMessage()))
+        .on(InboxUpdateException.class, (e, ctx) ->
+                logger.error("Failed to update envelope: {}", e.getMessage()));
+
+Janitor janitor = JanitorBuilderFactory.polling()
+        .from(inboxStatusQuery)
+        .with(inboxUpdater)
+        .removeWith(inboxEnvelopeRemover)
+        .on(eventBus)
+        .subscribeWith(eventBus)
+        .every(Duration.ofSeconds(30))
+        .withMillisecondsThreshold(60_000)
+        .withMillisecondsTtl(3_600_000)
+        .withErrorRouter(errorRouter)
+        .create();
+```
 
 ---
 
@@ -62,261 +181,22 @@ The publishing flow:
 
 | Concept | Description |
 |---|---|
-| **`Feeder`** | API entry point. Manages the publishing lifecycle (`startPublishing` / `stopPublishing`). |
-| **`FeederStrategy`** | Strategy interface with two implementations: `ReactiveFeeder` and `PollingFeeder`. |
-| **`ReactiveFeeder`** | Event-driven strategy — subscribes to `InboxItemStored` events on the bus. |
-| **`PollingFeeder`** | Schedule-driven strategy — polls the inbox at a configurable interval (default: 30s). |
-| **`InboxReader`** | Interface you implement to query inbox items by status (used by `PollingFeeder`). |
-| **`ChannelRouter`** | Routes events to named channels based on event type. Default channel: `"spool"`. |
-| **`FeederBuilderFactory`** | DSL entry point with `reactive()` and `polling()` presets. |
-| **`ErrorRouter`** | Maps exception types to handlers. Default mapping provided by `FeederErrorRouter`. |
+| **`Janitor`** | Main module implementing `SpoolModule`. Lifecycle via `SpoolNode`. |
+| **`JanitorBuilderFactory`** | DSL entry point. Returns a `PollingJanitorBuilder`. |
+| **`InboxStatusQuery`** | Interface to query envelopes by status from the inbox. |
+| **`InboxUpdater`** | Interface to update an envelope's status. |
+| **`InboxEnvelopeRemover`** | Interface to delete an envelope from the inbox. |
+| **`withMillisecondsThreshold`** | Envelopes stuck for longer than this are republished. |
+| **`withMillisecondsTtl`** | Envelopes older than this are removed permanently. |
 
----
+### What the Janitor does each cycle
 
-## Installation
-
-### Maven (GitHub Packages)
-
-```xml
-<dependency>
-    <groupId>software.spool</groupId>
-    <artifactId>feeder</artifactId>
-    <version>1.0.2-SNAPSHOT</version>
-</dependency>
-```
-
-Configure the GitHub Packages repository in your `pom.xml` or `settings.xml`:
-
-```xml
-<repositories>
-    <repository>
-        <id>github</id>
-        <url>https://maven.pkg.github.com/Spool-FRAMEWORK/packages</url>
-    </repository>
-</repositories>
-```
-
-> Requires **Java 17+**.
-
----
-
-## Quick Start
-
-```java
-// 1. Create your infrastructure
-InMemoryEventBus bus = new InMemoryEventBus();
-InMemoryInbox inbox = new InMemoryInbox();
-
-// 2. Create a reactive feeder
-Feeder feeder = FeederBuilderFactory.reactive()
-        .from(bus)                                         // listen for InboxItemStored events
-        .with(inbox)                                       // update inbox statuses
-        .on(bus)                                           // emit ItemPublished events
-        .withErrorRouter(FeederErrorRouter.defaults(bus))  // default error handling
-        .create();
-
-// 3. Start and stop
-feeder.startPublishing();
-// ... items flow from inbox to event channels ...
-feeder.stopPublishing();
-```
-
----
-
-## Examples
-
-### Reactive Publishing
-
-The feeder subscribes to `InboxItemStored` events on the event bus and processes each one immediately. Best for low-latency, event-driven architectures.
-
-```java
-Feeder feeder = FeederBuilderFactory.reactive()
-        .from(eventBusListener)
-        .with(inboxUpdater)
-        .on(eventBusEmitter)
-        .withErrorRouter(FeederErrorRouter.defaults(eventBusEmitter))
-        .create();
-
-feeder.startPublishing();
-```
-
----
-
-### Polling-based Publishing
-
-The feeder periodically queries the inbox for items with `PUBLISHING` status. Best for batch-oriented or high-throughput scenarios.
-
-```java
-Feeder feeder = FeederBuilderFactory.polling()
-        .from(inboxReader)
-        .with(inboxUpdater)
-        .on(eventBusEmitter)
-        .withErrorRouter(FeederErrorRouter.defaults(eventBusEmitter))
-        .create();
-
-feeder.startPublishing();
-```
-
----
-
-### Custom Polling Interval
-
-Override the default 30-second polling interval.
-
-```java
-Feeder feeder = FeederBuilderFactory.polling()
-        .from(inboxReader)
-        .with(inboxUpdater)
-        .on(eventBusEmitter)
-        .each(Duration.ofSeconds(5))    // poll every 5 seconds
-        .withErrorRouter(FeederErrorRouter.defaults(eventBusEmitter))
-        .create();
-
-feeder.startPublishing();
-```
-
----
-
-### Channel Routing by Event Type
-
-Use `ChannelRouter` to send events to different channels based on their type.
-
-```java
-ChannelRouter router = new ChannelRouter()
-        .route(OrderReceived.class, "orders")
-        .route(PaymentProcessed.class, "payments")
-        .route(UserRegistered.class, "users");
-
-// Resolve the channel for any event
-String channel = router.resolve(myEvent);  // "orders", "payments", "users", or default "spool"
-```
-
----
-
-### Custom Error Routing
-
-Override the default error routing to add logging, metrics, or recovery logic.
-
-```java
-ErrorRouter customRouter = new ErrorRouter()
-        .on(InboxReadException.class, (e, cause) -> {
-            logger.error("Failed to read inbox: {}", e.getMessage());
-            eventBusEmitter.emit(InboxItemConsumptionFailed.builder()
-                    .errorMessage(e.getMessage()).build());
-        })
-        .on(InboxUpdateException.class, (e, cause) -> {
-            logger.error("Failed to update inbox: {}", e.getMessage());
-            metrics.increment("inbox.update.failures");
-        });
-
-Feeder feeder = FeederBuilderFactory.reactive()
-        .from(eventBusListener)
-        .with(inboxUpdater)
-        .on(eventBusEmitter)
-        .withErrorRouter(customRouter)
-        .create();
-
-feeder.startPublishing();
-```
-
----
-
-### Full Pipeline (Crawler → Publisher → Ingester)
-
-A complete example showing how all three Spool modules work together.
-
-```java
-// Shared infrastructure
-InMemoryEventBus bus = new InMemoryEventBus();
-InMemoryInbox inbox = new InMemoryInbox();
-
-// 1. Crawler — fetches JSON from an API and stores records in the inbox
-CrawlerStrategy crawler = CrawlerBuilderFactory.poll(new MyApiSource())
-        .withFormat(Formats.JSON_ARRAY)
-        .ports(CrawlerPorts.builder()
-                .inbox(inbox)
-                .bus(bus)
-                .build())
-        .create();
-
-// 2. Publisher — reacts to InboxItemStored events and publishes them
-Feeder feeder = FeederBuilderFactory.reactive()
-        .from(bus)
-        .with(inbox)
-        .on(bus)
-        .withErrorRouter(FeederErrorRouter.defaults(bus))
-        .create();
-
-// 3. Ingester — buffers ItemPublished events and writes to data lake
-Ingester ingester = IngesterBuilderFactory.buffered()
-        .from(bus)
-        .storesWith(myDataLakeWriter)
-        .updatedWith(inbox)
-        .on(bus)
-        .flushWith(FlushPolicy.whenReaches(50).orEvery(Duration.ofSeconds(10)))
-        .create();
-
-// Start the pipeline (order matters: downstream first)
-ingester.startIngestion();
-feeder.startPublishing();
-crawler.execute();
-```
-
----
-
-## API Reference
-
-### Builder DSL — Reactive
-
-| Step | Method | Description |
-|---|---|---|
-| Entry point | `FeederBuilderFactory.reactive()` | Start building a reactive feeder. |
-| Listener | `.from(eventBusListener)` | Set the event bus to subscribe to. |
-| Updater | `.with(inboxUpdater)` | Set the inbox updater. |
-| Emitter | `.on(eventBusEmitter)` | Set the event bus to emit events on. |
-| Errors | `.withErrorRouter(errorRouter)` | Set the error router. |
-| Create | `.create()` | Return the configured `Feeder`. |
-
-### Builder DSL — Polling
-
-| Step | Method | Description |
-|---|---|---|
-| Entry point | `FeederBuilderFactory.polling()` | Start building a polling feeder. |
-| Reader | `.from(inboxReader)` | Set the inbox reader for querying items. |
-| Updater | `.with(inboxUpdater)` | Set the inbox updater. |
-| Emitter | `.on(eventBusEmitter)` | Set the event bus to emit events on. |
-| Interval | `.each(Duration.ofSeconds(15))` | Set the polling interval (default: 30s). |
-| Errors | `.withErrorRouter(errorRouter)` | Set the error router. |
-| Create | `.create()` | Return the configured `Feeder`. |
-
-### Feeder Lifecycle
-
-| Method | Description |
+| Step | Action |
 |---|---|
-| `startPublishing()` | Start the underlying strategy (subscribe or schedule). |
-| `stopPublishing()` | Stop the strategy and release resources. |
-
----
-
-## Event Model
-
-| Event | When Emitted |
-|---|---|
-| `InboxItemStored` | _Consumed_ — triggers the publishing process (reactive mode). |
-| `ItemPublished` | After an inbox item is read and its payload is published. |
-| `InboxItemConsumptionFailed` | When `InboxReader.findByStatus()` throws an exception. |
-| `InboxItemStoreFailed` | When `InboxUpdater.update()` throws an exception. |
-
-### Inbox Item Status Lifecycle
-
-```
-STORED → PUBLISHING → PUBLISHED
-```
-
-| Status | Meaning |
-|---|---|
-| `PUBLISHING` | The item has been picked up and is being published. |
-| `PUBLISHED` | The item has been successfully published to the event bus. |
+| **UpdatePersisted** | Marks envelopes as `PERSISTED` once confirmed downstream. |
+| **QuarantineFailed** | Moves envelopes that exceeded retries to `QUARANTINED` status. |
+| **RemoveExpired** | Deletes envelopes older than the configured TTL. |
+| **RepublishStuck** | Re-publishes envelopes that have been `CAPTURED` for longer than the threshold. |
 
 ---
 
