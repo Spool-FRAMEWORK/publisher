@@ -24,7 +24,7 @@
         "hide": 0,
         "includeAll": true,
         "allValue": ".*",
-        "label": "Nodo",
+        "label": "Node",
         "multi": true,
         "name": "node",
         "options": [],
@@ -46,7 +46,7 @@
     {
       "id": 1,
       "type": "row",
-      "title": "Ciclos",
+      "title": "Cycles",
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
     },
@@ -54,7 +54,7 @@
     {
       "id": 2,
       "type": "stat",
-      "title": "Ciclos completados",
+      "title": "Completed cycles",
       "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
       "fieldConfig": {
         "defaults": {
@@ -92,7 +92,7 @@
     {
       "id": 3,
       "type": "stat",
-      "title": "Ciclos fallidos",
+      "title": "Failed cycles",
       "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
       "fieldConfig": {
         "defaults": {
@@ -131,7 +131,7 @@
     {
       "id": 4,
       "type": "stat",
-      "title": "Tasa de fallo (%)",
+      "title": "Failure rate (%)",
       "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
       "fieldConfig": {
         "defaults": {
@@ -173,8 +173,8 @@
     {
       "id": 5,
       "type": "timeseries",
-      "title": "Duración del ciclo (p50 / p95)",
-      "description": "Tiempo que tarda cada ciclo de limpieza completo.",
+      "title": "Cycle duration (p50 / p95)",
+      "description": "Time taken by each full cleanup cycle.",
       "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
       "fieldConfig": {
         "defaults": {
@@ -211,7 +211,7 @@
     {
       "id": 6,
       "type": "row",
-      "title": "Registros",
+      "title": "Records",
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 13 }
     },
@@ -219,8 +219,8 @@
     {
       "id": 7,
       "type": "timeseries",
-      "title": "Registros limpiados / s",
-      "description": "Ritmo de limpieza por tipo: expired (TTL) y quarantine (fallos).",
+      "title": "Records cleaned / s",
+      "description": "Cleanup rate by reason: expired (TTL) and quarantine (failures).",
       "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
       "fieldConfig": {
         "defaults": {
@@ -251,8 +251,8 @@
     {
       "id": 8,
       "type": "stat",
-      "title": "Registros limpiados (total)",
-      "description": "Total acumulado de registros eliminados desde el arranque, por motivo.",
+      "title": "Records cleaned (total)",
+      "description": "Cumulative total of records deleted since process startup, broken down by reason.",
       "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
       "fieldConfig": {
         "defaults": {
@@ -273,7 +273,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
-          "expr": "sum by (reason) (spool_janitor_records_cleaned_total{service_name=~\"$node\"})\nor vector(0)",
+          "expr": "sum by (reason) (spool_janitor_records_cleaned_total{service_name=~\"$node\"})",
           "legendFormat": "{{reason}}",
           "refId": "A"
         }
