@@ -1,0 +1,285 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "tags": ["spool", "janitor"],
+  "time": { "from": "now-15m", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Spool — Janitor",
+  "uid": "spool-janitor-v1",
+  "version": 1,
+
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+        "definition": "label_values(spool_janitor_cycles_completed_total, service_name)",
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "label": "Nodo",
+        "multi": true,
+        "name": "node",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(spool_janitor_cycles_completed_total, service_name)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+
+  "panels": [
+
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Ciclos",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+    },
+
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Ciclos completados",
+      "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue", "value": 0 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+          "expr": "sum(spool_janitor_cycles_completed_total{service_name=~\"$node\"})\nor vector(0)",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 }
+    },
+
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Ciclos fallidos",
+      "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "red",   "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+          "expr": "sum(spool_janitor_cycles_failed_total{service_name=~\"$node\"})\nor vector(0)",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 }
+    },
+
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Tasa de fallo (%)",
+      "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": 0 },
+              { "color": "yellow", "value": 5 },
+              { "color": "red",    "value": 20 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+          "expr": "100 *\n(\n  sum(spool_janitor_cycles_failed_total{service_name=~\"$node\"})\n  or vector(0)\n)\n/\nclamp_min(\n  (\n    sum(spool_janitor_cycles_completed_total{service_name=~\"$node\"})\n    or vector(0)\n  )\n  +\n  (\n    sum(spool_janitor_cycles_failed_total{service_name=~\"$node\"})\n    or vector(0)\n  ),\n  1e-9\n)",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 1 }
+    },
+
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Duración del ciclo (p50 / p95)",
+      "description": "Tiempo que tarda cada ciclo de limpieza completo.",
+      "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 5, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": {
+          "displayMode": "table", "placement": "bottom", "showLegend": true,
+          "calcs": ["lastNotNull", "mean", "max"]
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+          "expr": "histogram_quantile(0.5, sum by (le, service_name) (rate(spool_janitor_cycle_duration_bucket{service_name=~\"$node\"}[1m])))",
+          "legendFormat": "p50 — {{service_name}}",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+          "expr": "histogram_quantile(0.95, sum by (le, service_name) (rate(spool_janitor_cycle_duration_bucket{service_name=~\"$node\"}[1m])))",
+          "legendFormat": "p95 — {{service_name}}",
+          "refId": "B"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 5 }
+    },
+
+    {
+      "id": 6,
+      "type": "row",
+      "title": "Registros",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 13 }
+    },
+
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Registros limpiados / s",
+      "description": "Ritmo de limpieza por tipo: expired (TTL) y quarantine (fallos).",
+      "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": {
+          "displayMode": "table", "placement": "bottom", "showLegend": true,
+          "calcs": ["lastNotNull", "mean", "max"]
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+          "expr": "sum by (service_name, reason) (rate(spool_janitor_records_cleaned_total{service_name=~\"$node\"}[1m]))",
+          "legendFormat": "{{service_name}} / {{reason}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 }
+    },
+
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Registros limpiados (total)",
+      "description": "Total acumulado de registros eliminados desde el arranque, por motivo.",
+      "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "spool-prometheus" },
+          "expr": "sum by (reason) (spool_janitor_records_cleaned_total{service_name=~\"$node\"})\nor vector(0)",
+          "legendFormat": "{{reason}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 }
+    }
+
+  ]
+}

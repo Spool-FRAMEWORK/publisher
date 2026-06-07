@@ -3,28 +3,7 @@ on:
   push:
     branches: [ develop ]
   workflow_dispatch:
-
-permissions:
-  packages: write
-  contents: read
-
 jobs:
   publish:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-          server-id: github
-          server-username: GITHUB_ACTOR
-          server-password: GITHUB_TOKEN
-
-      - name: Publish to GitHub Packages
-        run: mvn deploy -B --no-transfer-progress -DskipTests
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_ACTOR: ${{ github.actor }}
+    uses: Spool-FRAMEWORK/.github/.github/workflows/reusable-publish-snapshot.yml@main
+    secrets: inherit

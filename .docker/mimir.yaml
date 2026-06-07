@@ -1,0 +1,30 @@
+multitenancy_enabled: false
+
+server:
+  http_listen_port: 9009
+  log_level: info
+
+common:
+  storage:
+    backend: filesystem
+
+blocks_storage:
+  backend: filesystem
+  filesystem:
+    dir: /tmp/mimir/blocks-storage
+
+compactor:
+  data_dir: /tmp/mimir/compactor
+
+ingester:
+  ring:
+    replication_factor: 1
+
+ruler_storage:
+  backend: filesystem
+  filesystem:
+    dir: /tmp/mimir/rules
+
+store_gateway:
+  sharding_ring:
+    replication_factor: 1
