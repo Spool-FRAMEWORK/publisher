@@ -4,14 +4,6 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <repositories>
-        <repository>
-            <id>github</id>
-            <name>Spool-FRAMEWORK GitHub Packages</name>
-            <url>https://maven.pkg.github.com/Spool-FRAMEWORK/packages</url>
-        </repository>
-    </repositories>
-
     <groupId>io.github.spool-framework</groupId>
     <artifactId>janitor</artifactId>
     <version>1.0.5-SNAPSHOT</version>
@@ -24,7 +16,7 @@
     <licenses>
         <license>
             <name>The Apache License, Version 2.0</name>
-            <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
         </license>
     </licenses>
 
@@ -32,8 +24,6 @@
         <developer>
             <name>Javier Castilla</name>
             <email>javier.casno@gmail.com</email>
-            <organization>ULPGC EII</organization>
-            <organizationUrl>https://www.eii.ulpgc.es</organizationUrl>
         </developer>
     </developers>
 
@@ -41,6 +31,7 @@
         <connection>scm:git:git@github.com:Spool-FRAMEWORK/${project.artifactId}.git</connection>
         <developerConnection>scm:git:ssh://git@github.com/Spool-FRAMEWORK/${project.artifactId}.git</developerConnection>
         <url>https://github.com/Spool-FRAMEWORK/${project.artifactId}</url>
+        <tag>HEAD</tag>
     </scm>
 
     <properties>
@@ -48,10 +39,21 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
-    <distributionManagement>
-        <snapshotRepository>
+    <repositories>
+        <repository>
             <id>github</id>
             <name>Spool-FRAMEWORK GitHub Packages</name>
+            <url>https://maven.pkg.github.com/Spool-FRAMEWORK/*</url>
+        </repository>
+    </repositories>
+
+    <distributionManagement>
+        <repository>
+            <id>central</id>
+            <url>https://central.sonatype.com/api/v1/publisher</url>
+        </repository>
+        <snapshotRepository>
+            <id>github</id>
             <url>https://maven.pkg.github.com/Spool-FRAMEWORK/janitor</url>
         </snapshotRepository>
     </distributionManagement>
@@ -82,6 +84,55 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>release</id>
+            <pluginRepositories>
+                <pluginRepository>
+                    <id>central</id>
+                    <name>Maven Central</name>
+                    <url>https://repo.maven.apache.org/maven2</url>
+                    <releases><enabled>true</enabled></releases>
+                    <snapshots><enabled>false</enabled></snapshots>
+                </pluginRepository>
+            </pluginRepositories>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>3.2.7</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals><goal>sign</goal></goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <gpgArguments>
+                                <arg>--batch</arg>
+                                <arg>--yes</arg>
+                                <arg>--pinentry-mode</arg>
+                                <arg>loopback</arg>
+                            </gpgArguments>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>0.7.0</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <publishingServerId>central</publishingServerId>
+                            <autoPublish>true</autoPublish>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
     <dependencies>
         <dependency>
