@@ -9,6 +9,7 @@ import software.spool.core.pipeline.PipelineContext;
 import software.spool.core.pipeline.Step;
 import software.spool.core.port.bus.EventPublisher;
 import software.spool.core.port.inbox.InboxStatusQuery;
+import software.spool.core.port.inbox.InboxUpdater;
 import software.spool.core.port.logging.Logger;
 
 import java.time.Duration;
@@ -18,13 +19,17 @@ import java.util.Objects;
 public class RepublishStuckEnvelopesStep implements Step<PipelineContext, PipelineContext> {
     private static final Logger LOG = LoggerFactory.getLogger(RepublishStuckEnvelopesStep.class);
     private final InboxStatusQuery reader;
+    private final InboxUpdater updater;
     private final EventPublisher publisher;
     private final Duration threshold;
+    private final int maxRetries;
 
-    public RepublishStuckEnvelopesStep(InboxStatusQuery reader, EventPublisher publisher, Duration threshold) {
+    public RepublishStuckEnvelopesStep(InboxStatusQuery reader, InboxUpdater updater, EventPublisher publisher, Duration threshold, int maxRetries) {
         this.reader = reader;
+        this.updater = updater;
         this.publisher = publisher;
         this.threshold = Objects.requireNonNullElse(threshold, Duration.ofMinutes(3));
+        this.maxRetries = maxRetries;
     }
 
     @Override
@@ -32,10 +37,19 @@ public class RepublishStuckEnvelopesStep implements Step<PipelineContext, Pipeli
         reader.findByStatus(EnvelopeStatus.CAPTURED).stream()
                 .filter(e -> getLastModifiedInstant(e).isBefore(Instant.now().minus(threshold)))
                 .map(Envelope::retry)
-                .peek(e -> LOG.warn("Republished Envelope {} | current attempt: {}", e, e.retries()))
-                .map(this::buildEventFrom)
-                .forEach(publisher::publish);
+                .forEach(this::handleRetry);
         return context;
+    }
+
+    private void handleRetry(Envelope envelope) {
+        if (envelope.retries() >= maxRetries) {
+            updater.update(envelope.idempotencyKey(), EnvelopeStatus.QUARANTINED);
+            LOG.error("Quarantined Envelope {} after {} attempts", envelope, envelope.retries());
+        } else {
+            updater.update(envelope);
+            LOG.warn("Republished Envelope {} | current attempt: {}", envelope, envelope.retries());
+            publisher.publish(buildEventFrom(envelope));
+        }
     }
 
     private Instant getLastModifiedInstant(Envelope envelope) {
