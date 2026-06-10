@@ -11,6 +11,9 @@ target/
 *.ipr
 
 feeder.xml
+repomix-output.xml
+*CLAUDE*.md
+*-context
 
 ### Eclipse ###
 .apt_generated

@@ -38,6 +38,7 @@ public class PollingJanitorBuilder {
     private ErrorRouter errorRouter;
     private Integer millisecondsThreshold;
     private Integer millisecondsTtl;
+    private Integer maxRetries;
     private final MetricsRegistry metricsRegistry = new OpenTelemetryMetricsRegistry();
 
     PollingJanitorBuilder(ModuleHeartBeat heartBeat) {
@@ -89,6 +90,11 @@ public class PollingJanitorBuilder {
         return this;
     }
 
+    public PollingJanitorBuilder withMaxRetries(Integer maxRetries) {
+        this.maxRetries = maxRetries;
+        return this;
+    }
+
     public Janitor create() {
         return new Janitor(initializeStrategy(), getErrorRouter(), heartBeat);
     }
@@ -116,6 +122,6 @@ public class PollingJanitorBuilder {
                 .add(new ObservedStep<>("expired-envelopes",
                         new RemoveExpiredEnvelopesStep(getErrorRouter(), Duration.ofMillis(millisecondsTtl), remover, reader, recordsCleaned)))
                 .add(new ObservedStep<>("handle-stuck-envelopes",
-                        new RepublishStuckEnvelopesStep(reader, publisher, Duration.ofMillis(millisecondsThreshold))));
+                        new RepublishStuckEnvelopesStep(reader, updater, publisher, Duration.ofMillis(millisecondsThreshold), Objects.requireNonNullElse(maxRetries, 3))));
     }
 }
